@@ -93,7 +93,7 @@ func TestAgentsHandler_ExpandProcessesAndConnections(t *testing.T) {
 			{PID: 99, PPID: 0, Name: "unrelated", StartedAt: now}, // not tied to any agent
 		},
 		[]model.Connection{
-			{PID: 1, RemoteAddr: "203.0.113.1", RemotePort: 443, Endpoint: "Anthropic API", Classification: "public", ObservedAt: now, AgentID: "abc"},
+			{PID: 1, RemoteIP: "203.0.113.1", RemoteHost: "node-203-0-113-1.example.net", RemotePort: 443, Endpoint: "Anthropic API", Classification: "public", ObservedAt: now, AgentID: "abc"},
 		},
 	)
 	if err != nil {

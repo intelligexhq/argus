@@ -22,7 +22,15 @@ type EndpointClassifier struct {
 	privateNets  []*net.IPNet
 
 	mu    sync.Mutex
-	cache map[string]string // ip -> resolved label ("" = looked up, no match)
+	cache map[string]rdnsResult // ip -> resolved (label, host)
+}
+
+// rdnsResult holds the cached output of a reverse-DNS lookup: the curated
+// model-service label (empty if no match against modelHosts) and the first
+// PTR hostname (empty if the lookup failed).
+type rdnsResult struct {
+	label string
+	host  string
 }
 
 // NewDefault seeds the well-known public model endpoints and RFC1918/ULA ranges.
@@ -50,7 +58,7 @@ func NewDefault() *EndpointClassifier {
 			"GOOGLE_GENAI_API_BASE": "Google Gemini",
 			"COHERE_API_URL":        "Cohere",
 		},
-		cache: map[string]string{},
+		cache: map[string]rdnsResult{},
 	}
 	for _, cidr := range []string{
 		"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7",
@@ -111,21 +119,25 @@ func (c *EndpointClassifier) ClassifyLocality(host string) string {
 	}
 }
 
-// Classify returns (modelLabel, locality) for a remote IP. modelLabel is "" when
-// the endpoint is not a recognised model service.
-func (c *EndpointClassifier) Classify(ipStr string) (string, string) {
-	class := "unknown"
+// Classify returns (modelLabel, rDNS host, locality) for a remote IP.
+// modelLabel is "" when the endpoint is not a recognised model service. host is
+// the raw PTR result (possibly generic, e.g. "*.cloudfront.net") — preserved so
+// callers can record provenance even when no curated label matched. host is ""
+// if rDNS lookup failed or returned nothing.
+func (c *EndpointClassifier) Classify(ipStr string) (label, host, locality string) {
+	locality = "unknown"
 	if ip := net.ParseIP(ipStr); ip != nil {
 		switch {
 		case ip.IsLoopback():
-			class = "loopback"
+			locality = "loopback"
 		case c.isPrivate(ip):
-			class = "private"
+			locality = "private"
 		default:
-			class = "public"
+			locality = "public"
 		}
 	}
-	return c.lookupLabel(ipStr), class
+	label, host = c.lookupRDNS(ipStr)
+	return
 }
 
 func (c *EndpointClassifier) isPrivate(ip net.IP) bool {
@@ -137,16 +149,19 @@ func (c *EndpointClassifier) isPrivate(ip net.IP) bool {
 	return false
 }
 
-func (c *EndpointClassifier) lookupLabel(ipStr string) string {
+// lookupRDNS performs a reverse-DNS lookup and returns (curated label, raw host).
+// Both halves are cached; an entry with empty fields means "looked up, nothing
+// useful". The first PTR result (trailing dot trimmed) becomes the host.
+func (c *EndpointClassifier) lookupRDNS(ipStr string) (label, host string) {
 	c.mu.Lock()
-	if l, ok := c.cache[ipStr]; ok {
+	if entry, ok := c.cache[ipStr]; ok {
 		c.mu.Unlock()
-		return l
+		return entry.label, entry.host
 	}
 	c.mu.Unlock()
 
-	label := ""
-	if names, err := net.LookupAddr(ipStr); err == nil {
+	if names, err := net.LookupAddr(ipStr); err == nil && len(names) > 0 {
+		host = strings.TrimSuffix(strings.ToLower(names[0]), ".")
 		for _, name := range names {
 			n := strings.ToLower(name)
 			for sub, l := range c.modelHosts {
@@ -162,7 +177,7 @@ func (c *EndpointClassifier) lookupLabel(ipStr string) string {
 	}
 
 	c.mu.Lock()
-	c.cache[ipStr] = label
+	c.cache[ipStr] = rdnsResult{label: label, host: host}
 	c.mu.Unlock()
-	return label
+	return
 }

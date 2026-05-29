@@ -61,7 +61,7 @@ func TestNetworkCollector_CollectFilterContract(t *testing.T) {
 		t.Skipf("network collector unavailable on this host (%v) — skipping", err)
 	}
 	for _, c := range res.Connections {
-		if c.PID == 0 || c.RemoteAddr == "" || c.RemotePort == 0 {
+		if c.PID == 0 || c.RemoteIP == "" || c.RemotePort == 0 {
 			t.Errorf("filter contract violated: %+v", c)
 		}
 		if c.Classification == "" {

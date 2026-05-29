@@ -37,10 +37,11 @@ func (c *NetworkCollector) Collect(ctx context.Context) (Result, error) {
 		if cn.Pid == 0 || cn.Raddr.IP == "" || cn.Raddr.Port == 0 {
 			continue // listening / local / unattributed socket
 		}
-		label, class := c.classifier.Classify(cn.Raddr.IP)
+		label, host, class := c.classifier.Classify(cn.Raddr.IP)
 		out = append(out, model.Connection{
 			PID:            cn.Pid,
-			RemoteAddr:     cn.Raddr.IP,
+			RemoteIP:       cn.Raddr.IP,
+			RemoteHost:     host, // raw PTR result, possibly generic (*.cloudfront.net) or ""
 			RemotePort:     cn.Raddr.Port,
 			Endpoint:       label,
 			Classification: class,

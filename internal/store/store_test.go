@@ -74,7 +74,7 @@ func TestWriteSnapshot_ReplacesProcsAndConns(t *testing.T) {
 
 	err := st.WriteSnapshot(t0, nil,
 		[]model.Process{{PID: 1, PPID: 0, Name: "a", StartedAt: t0}, {PID: 2, PPID: 1, Name: "b", StartedAt: t0}},
-		[]model.Connection{{PID: 1, RemoteAddr: "1.2.3.4", RemotePort: 443, Classification: "public", ObservedAt: t0}},
+		[]model.Connection{{PID: 1, RemoteIP: "1.2.3.4", RemotePort: 443, Classification: "public", ObservedAt: t0}},
 	)
 	if err != nil {
 		t.Fatalf("WriteSnapshot 1: %v", err)
@@ -174,7 +174,7 @@ func TestListConnections_Roundtrip(t *testing.T) {
 	st := newTestStore(t)
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	c := model.Connection{
-		PID: 99, RemoteAddr: "203.0.113.1", RemotePort: 443,
+		PID: 99, RemoteIP: "203.0.113.1", RemoteHost: "node-203-0-113-1.example.net", RemotePort: 443,
 		Endpoint: "Anthropic API", Classification: "public",
 		ObservedAt: now, AgentID: "abc",
 	}
@@ -190,7 +190,7 @@ func TestListConnections_Roundtrip(t *testing.T) {
 		t.Fatalf("want 1 connection, got %d", len(got))
 	}
 	g := got[0]
-	if g.PID != c.PID || g.RemoteAddr != c.RemoteAddr || g.RemotePort != c.RemotePort ||
+	if g.PID != c.PID || g.RemoteIP != c.RemoteIP || g.RemoteHost != c.RemoteHost || g.RemotePort != c.RemotePort ||
 		g.Endpoint != c.Endpoint || g.Classification != c.Classification || g.AgentID != c.AgentID {
 		t.Errorf("roundtrip mismatch: got %+v want %+v", g, c)
 	}
@@ -207,7 +207,7 @@ func TestListConnections_EnvSourceRoundtrip(t *testing.T) {
 	st := newTestStore(t)
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	c := model.Connection{
-		PID: 42, RemoteAddr: "gpu.internal", RemotePort: 11434,
+		PID: 42, RemoteHost: "gpu.internal", RemotePort: 11434,
 		Endpoint: "Ollama", Classification: "private",
 		ObservedAt: now, AgentID: "xyz",
 		Source: "env", SourceDetail: "OLLAMA_HOST",

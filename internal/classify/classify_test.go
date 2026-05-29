@@ -22,11 +22,26 @@ func TestClassify_Locality(t *testing.T) {
 		{"", "unknown"},
 	}
 	for _, tc := range cases {
-		c.cache[tc.ip] = "" // prime to skip net.LookupAddr (offline tests)
-		_, got := c.Classify(tc.ip)
+		c.cache[tc.ip] = rdnsResult{} // prime to skip net.LookupAddr (offline tests)
+		_, _, got := c.Classify(tc.ip)
 		if got != tc.want {
 			t.Errorf("Classify(%q) class = %q, want %q", tc.ip, got, tc.want)
 		}
+	}
+}
+
+func TestClassify_ReturnsRawPTRHost(t *testing.T) {
+	// Even when no label matches, the raw PTR result is returned for callers
+	// to persist as remote_host. Prime cache with a synthesised entry to keep
+	// the test offline.
+	c := NewDefault()
+	c.cache["104.16.0.1"] = rdnsResult{label: "", host: "1.0.16.104.cloudflareaccess.com"}
+	label, host, _ := c.Classify("104.16.0.1")
+	if label != "" {
+		t.Errorf("label = %q, want empty (no allowlist match)", label)
+	}
+	if host != "1.0.16.104.cloudflareaccess.com" {
+		t.Errorf("host = %q, want raw PTR result", host)
 	}
 }
 

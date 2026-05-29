@@ -132,9 +132,14 @@ components:
       type: object
       properties:
         pid: { type: integer, format: int32 }
-        remote_addr: { type: string, description: "Empty when source=env and the value did not include a resolvable host." }
+        remote_ip:
+          type: string
+          description: "IP literal of the remote endpoint. Empty when the source only knew a hostname (env URL with no IP literal)."
+        remote_host:
+          type: string
+          description: "Hostname of the remote endpoint. For socket rows this is the raw rDNS PTR result (possibly generic, e.g. '*.cloudfront.net'); for env rows it is the host parsed from the env URL. Empty if neither rDNS nor the URL produced a hostname."
         remote_port: { type: integer, format: int32 }
-        endpoint: { type: string, description: "Matched model-service label, if any." }
+        endpoint: { type: string, description: "Curated model-service label, if matched against the allowlist." }
         classification:
           type: string
           enum: [public, private, loopback, unknown]

@@ -9,7 +9,6 @@ package store
 
 import (
 	"database/sql"
-	"strings"
 	"time"
 
 	"github.com/intelligexhq/argus/internal/model"
@@ -34,8 +33,14 @@ func Open(path string) (*Store, error) {
 
 func (s *Store) Close() error { return s.db.Close() }
 
+// migrate creates the schema on a fresh database. There is no in-place
+// migration path while the project is pre-users: schema changes during the
+// stabilisation phase are made by editing this CREATE block, and operators
+// (currently just the maintainer) delete ~/.argus/argus.db once. When v0.1 is
+// tagged and external users exist, this approach inverts and additive ALTERs
+// or a versioned migration runner go here.
 func (s *Store) migrate() error {
-	if _, err := s.db.Exec(`
+	_, err := s.db.Exec(`
 CREATE TABLE IF NOT EXISTS agents (
   id         TEXT PRIMARY KEY,
   type       TEXT NOT NULL,
@@ -55,7 +60,8 @@ CREATE TABLE IF NOT EXISTS processes (
 );
 CREATE TABLE IF NOT EXISTS connections (
   pid            INTEGER NOT NULL,
-  remote_addr    TEXT,
+  remote_ip      TEXT,
+  remote_host    TEXT NOT NULL DEFAULT '',
   remote_port    INTEGER,
   endpoint       TEXT,
   classification TEXT,
@@ -70,21 +76,8 @@ CREATE TABLE IF NOT EXISTS scan_runs (
   n_agents      INTEGER NOT NULL,
   n_processes   INTEGER NOT NULL,
   n_connections INTEGER NOT NULL
-);`); err != nil {
-		return err
-	}
-	// Additive migrations for pre-existing databases. SQLite ALTER TABLE only
-	// adds the column if it's absent; duplicate-column errors are expected
-	// when the CREATE above already wrote it.
-	for _, stmt := range []string{
-		`ALTER TABLE connections ADD COLUMN source TEXT NOT NULL DEFAULT 'socket'`,
-		`ALTER TABLE connections ADD COLUMN source_detail TEXT NOT NULL DEFAULT ''`,
-	} {
-		if _, err := s.db.Exec(stmt); err != nil && !strings.Contains(err.Error(), "duplicate column") {
-			return err
-		}
-	}
-	return nil
+);`)
+	return err
 }
 
 func ms(t time.Time) int64       { return t.UnixMilli() }
@@ -135,9 +128,9 @@ func (s *Store) WriteSnapshot(now time.Time, agents []model.Agent, procs []model
 			source = "socket"
 		}
 		if _, err := tx.Exec(
-			`INSERT INTO connections(pid,remote_addr,remote_port,endpoint,classification,observed_at,agent_id,source,source_detail)
-			 VALUES(?,?,?,?,?,?,?,?,?)`,
-			c.PID, c.RemoteAddr, c.RemotePort, c.Endpoint, c.Classification, ms(c.ObservedAt), c.AgentID, source, c.SourceDetail,
+			`INSERT INTO connections(pid,remote_ip,remote_host,remote_port,endpoint,classification,observed_at,agent_id,source,source_detail)
+			 VALUES(?,?,?,?,?,?,?,?,?,?)`,
+			c.PID, c.RemoteIP, c.RemoteHost, c.RemotePort, c.Endpoint, c.Classification, ms(c.ObservedAt), c.AgentID, source, c.SourceDetail,
 		); err != nil {
 			return err
 		}
@@ -220,7 +213,7 @@ func (s *Store) ListProcesses() ([]model.Process, error) {
 
 func (s *Store) ListConnections() ([]model.Connection, error) {
 	rows, err := s.db.Query(
-		`SELECT pid,remote_addr,remote_port,endpoint,classification,observed_at,agent_id,source,source_detail
+		`SELECT pid,remote_ip,remote_host,remote_port,endpoint,classification,observed_at,agent_id,source,source_detail
 		 FROM connections ORDER BY pid`)
 	if err != nil {
 		return nil, err
@@ -230,7 +223,7 @@ func (s *Store) ListConnections() ([]model.Connection, error) {
 	for rows.Next() {
 		var c model.Connection
 		var ob int64
-		if err := rows.Scan(&c.PID, &c.RemoteAddr, &c.RemotePort, &c.Endpoint, &c.Classification, &ob, &c.AgentID, &c.Source, &c.SourceDetail); err != nil {
+		if err := rows.Scan(&c.PID, &c.RemoteIP, &c.RemoteHost, &c.RemotePort, &c.Endpoint, &c.Classification, &ob, &c.AgentID, &c.Source, &c.SourceDetail); err != nil {
 			return nil, err
 		}
 		c.ObservedAt = fromMS(ob)

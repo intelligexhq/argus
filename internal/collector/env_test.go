@@ -76,18 +76,35 @@ func TestEnvCollector_ScanEnv(t *testing.T) {
 		}
 	}
 
-	// Locality propagated through ClassifyLocality:
+	// Locality propagated through ClassifyLocality; hostnames go into
+	// RemoteHost (not RemoteIP), which stays empty for these inputs.
 	for _, c := range got {
 		switch c.SourceDetail {
 		case "OLLAMA_HOST":
-			if c.Classification != "private" || c.RemoteAddr != "gpu.internal" || c.RemotePort != 11434 {
+			if c.Classification != "private" || c.RemoteHost != "gpu.internal" || c.RemoteIP != "" || c.RemotePort != 11434 {
 				t.Errorf("OLLAMA_HOST parse wrong: %+v", c)
 			}
 		case "OPENAI_BASE_URL":
-			if c.Classification != "public" || c.RemoteAddr != "api.openai.com" {
+			if c.Classification != "public" || c.RemoteHost != "api.openai.com" || c.RemoteIP != "" {
 				t.Errorf("OPENAI_BASE_URL parse wrong: %+v", c)
 			}
 		}
+	}
+}
+
+func TestEnvCollector_ScanEnv_IPLiteralGoesToRemoteIP(t *testing.T) {
+	// When the env URL contains a literal IP, it should populate RemoteIP and
+	// leave RemoteHost empty — opposite of the hostname case above.
+	c := NewEnvCollector(classify.NewDefault())
+	got := c.scanEnv([]string{"OLLAMA_HOST=http://10.0.0.5:11434"}, 1, time.Unix(0, 0))
+	if len(got) != 1 {
+		t.Fatalf("want 1 row, got %d", len(got))
+	}
+	if got[0].RemoteIP != "10.0.0.5" || got[0].RemoteHost != "" {
+		t.Errorf("IP literal should populate RemoteIP, got %+v", got[0])
+	}
+	if got[0].Classification != "private" {
+		t.Errorf("10.0.0.5 should be private, got %q", got[0].Classification)
 	}
 }
 

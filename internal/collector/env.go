@@ -71,9 +71,16 @@ func (c *EnvCollector) scanEnv(env []string, pid int32, now time.Time) []model.C
 			continue
 		}
 		host, port := parseEndpointURL(val)
+		var ip, hostname string
+		if net.ParseIP(host) != nil {
+			ip = host
+		} else {
+			hostname = host
+		}
 		out = append(out, model.Connection{
 			PID:            pid,
-			RemoteAddr:     host,
+			RemoteIP:       ip,
+			RemoteHost:     hostname,
 			RemotePort:     port,
 			Endpoint:       label,
 			Classification: c.classifier.ClassifyLocality(host),

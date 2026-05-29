@@ -17,16 +17,22 @@ type Process struct {
 // Connection is a remote endpoint signal tied to a process. Source disambiguates
 // how the signal was observed: a live OS socket ("socket") or a declared
 // endpoint read from the process environment ("env").
+//
+// RemoteIP and RemoteHost are independent: a socket row typically has both
+// (IP from the socket table, Host from rDNS PTR — possibly generic like
+// "*.cloudfront.net"); an env-declared row typically has one or the other
+// depending on whether the URL named a literal IP or a hostname.
 type Connection struct {
 	PID            int32     `json:"pid"`
-	RemoteAddr     string    `json:"remote_addr"`               // empty for env-declared endpoints with no resolved IP
+	RemoteIP       string    `json:"remote_ip,omitempty"`     // IP literal, when known
+	RemoteHost     string    `json:"remote_host,omitempty"`   // hostname — rDNS PTR for sockets, URL host for env
 	RemotePort     uint32    `json:"remote_port"`
-	Endpoint       string    `json:"endpoint,omitempty"`        // matched model-service label, if any
-	Classification string    `json:"classification"`            // public | private | loopback | unknown
+	Endpoint       string    `json:"endpoint,omitempty"`      // curated model-service label, if matched
+	Classification string    `json:"classification"`          // public | private | loopback | unknown
 	ObservedAt     time.Time `json:"observed_at"`
 	AgentID        string    `json:"agent_id,omitempty"`
-	Source         string    `json:"source"`                    // socket | env
-	SourceDetail   string    `json:"source_detail,omitempty"`   // for env: matched env var name
+	Source         string    `json:"source"`                  // socket | env
+	SourceDetail   string    `json:"source_detail,omitempty"` // for env: matched env var name
 }
 
 // Agent is a discovered AI agent: a correlated identity over one or more processes.

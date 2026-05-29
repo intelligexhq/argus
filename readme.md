@@ -86,6 +86,11 @@ internal/api        local HTTP/JSON read API + embedded OpenAPI spec
 
 Items to address / explore. The scaffold is intentionally narrow — these expand its reach without compromising the unprivileged-by-default posture.
 
+**Lifecycle**
+- add linting & validation
+- add github actions for testig and building
+- how do we distribute? best practices?
+
 **Collection depth**
 
 - DNS/SNI capture collector to replace best-effort reverse-DNS labelling of remote IPs (current heuristic is brittle on shared CDNs and private model hosts). The unprivileged env-var collector closes the gap for agents that announce their endpoint via configuration (`OLLAMA_HOST`, `OPENAI_BASE_URL`, `AZURE_OPENAI_ENDPOINT`, …); DNS/SNI is still needed for the hardcoded-default case (Claude Code → `api.anthropic.com`, etc.).
