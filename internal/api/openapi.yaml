@@ -1,0 +1,149 @@
+openapi: 3.1.0
+info:
+  title: Argus collector API
+  version: 0.1.0
+  description: >
+    Local read API for the Argus headless agent-discovery collector. Served
+    over a unix domain socket (default) or loopback TCP. This document is the
+    source of truth for the API and is embedded in the binary, so it is always
+    available offline at GET /v1/openapi.yaml (and rendered at GET /v1/openapi).
+servers:
+  - url: /
+    description: Relative to the listener (loopback TCP or unix socket); resolves against the page origin in Swagger UI.
+paths:
+  /healthz:
+    get:
+      summary: Liveness check
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+  /v1/agents:
+    get:
+      summary: Discovered agents (current inventory)
+      parameters:
+        - in: query
+          name: expand
+          required: false
+          description: >
+            Comma-separated list of related resources to embed per agent.
+            Supported values: `processes`, `connections`. Unknown tokens are
+            ignored. When omitted, only the agent summary is returned. When a
+            value is set, each agent gains the corresponding array(s) joined on
+            agent_id.
+          schema:
+            type: string
+            example: processes,connections
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  agents:
+                    type: array
+                    items:
+                      allOf:
+                        - $ref: "#/components/schemas/Agent"
+                        - type: object
+                          properties:
+                            processes:
+                              type: array
+                              items: { $ref: "#/components/schemas/Process" }
+                            connections:
+                              type: array
+                              items: { $ref: "#/components/schemas/Connection" }
+  /v1/processes:
+    get:
+      summary: Processes from the latest scan
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  processes:
+                    type: array
+                    items: { $ref: "#/components/schemas/Process" }
+  /v1/connections:
+    get:
+      summary: Connections from the latest scan
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  connections:
+                    type: array
+                    items: { $ref: "#/components/schemas/Connection" }
+  /v1/openapi.yaml:
+    get:
+      summary: This OpenAPI document
+      responses:
+        "200":
+          description: OK
+          content:
+            application/yaml: {}
+  /v1/openapi:
+    get:
+      summary: Swagger UI rendering of this OpenAPI document
+      responses:
+        "200":
+          description: OK
+          content:
+            text/html: {}
+components:
+  schemas:
+    Agent:
+      type: object
+      properties:
+        id: { type: string }
+        type: { type: string }
+        name: { type: string }
+        confidence: { type: number, format: float }
+        pids:
+          type: array
+          items: { type: integer, format: int32 }
+        first_seen: { type: string, format: date-time }
+        last_seen: { type: string, format: date-time }
+    Process:
+      type: object
+      properties:
+        pid: { type: integer, format: int32 }
+        ppid: { type: integer, format: int32 }
+        name: { type: string }
+        exe: { type: string }
+        cmdline: { type: string }
+        started_at: { type: string, format: date-time }
+        agent_id: { type: string }
+    Connection:
+      type: object
+      properties:
+        pid: { type: integer, format: int32 }
+        remote_addr: { type: string, description: "Empty when source=env and the value did not include a resolvable host." }
+        remote_port: { type: integer, format: int32 }
+        endpoint: { type: string, description: "Matched model-service label, if any." }
+        classification:
+          type: string
+          enum: [public, private, loopback, unknown]
+        observed_at: { type: string, format: date-time }
+        agent_id: { type: string }
+        source:
+          type: string
+          enum: [socket, env]
+          description: "How the signal was observed: a live OS socket, or a model-endpoint env var declared on the process."
+        source_detail:
+          type: string
+          description: "When source=env, the env-var name that matched (e.g. OLLAMA_HOST). Empty otherwise."

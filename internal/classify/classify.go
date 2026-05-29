@@ -1,0 +1,168 @@
+// Package classify decides what a remote endpoint is: its network locality
+// (public / private / loopback) and, best-effort, whether it is a known model
+// service. Endpoints are deliberately data-driven rather than hardcoded so an
+// operator can register private inference hosts (internal vLLM/Triton, a
+// VPC-private Bedrock/Azure endpoint) as model endpoints.
+package classify
+
+import (
+	"net"
+	"strings"
+	"sync"
+)
+
+// EndpointClassifier resolves remote IPs to (label, classification).
+type EndpointClassifier struct {
+	// modelHosts maps a hostname substring to a human label. Reverse-DNS of the
+	// remote IP is matched against these.
+	modelHosts map[string]string
+	// endpointEnvs maps an env-var name (case-insensitive) to a model-service
+	// label, for the env-var collector.
+	endpointEnvs map[string]string
+	privateNets  []*net.IPNet
+
+	mu    sync.Mutex
+	cache map[string]string // ip -> resolved label ("" = looked up, no match)
+}
+
+// NewDefault seeds the well-known public model endpoints and RFC1918/ULA ranges.
+func NewDefault() *EndpointClassifier {
+	ec := &EndpointClassifier{
+		modelHosts: map[string]string{
+			"api.anthropic.com":                 "Anthropic API",
+			"api.openai.com":                    "OpenAI API",
+			"openai.azure.com":                  "Azure OpenAI",
+			"generativelanguage.googleapis.com": "Google Gemini API",
+			"bedrock":                           "AWS Bedrock",
+			"api.cohere.ai":                     "Cohere API",
+			"api.mistral.ai":                    "Mistral API",
+			"api.groq.com":                      "Groq API",
+		},
+		endpointEnvs: map[string]string{
+			"OPENAI_BASE_URL":       "OpenAI",
+			"OPENAI_API_BASE":       "OpenAI",
+			"ANTHROPIC_BASE_URL":    "Anthropic",
+			"ANTHROPIC_API_URL":     "Anthropic",
+			"AZURE_OPENAI_ENDPOINT": "Azure OpenAI",
+			"OLLAMA_HOST":           "Ollama",
+			"GROQ_API_BASE":         "Groq",
+			"MISTRAL_BASE_URL":      "Mistral",
+			"GOOGLE_GENAI_API_BASE": "Google Gemini",
+			"COHERE_API_URL":        "Cohere",
+		},
+		cache: map[string]string{},
+	}
+	for _, cidr := range []string{
+		"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7",
+	} {
+		if _, n, err := net.ParseCIDR(cidr); err == nil {
+			ec.privateNets = append(ec.privateNets, n)
+		}
+	}
+	return ec
+}
+
+// RegisterModelHost adds a private/custom endpoint so its traffic is labelled as
+// a model service. (Wired to config in a later iteration.)
+func (c *EndpointClassifier) RegisterModelHost(hostSubstring, label string) {
+	c.modelHosts[strings.ToLower(hostSubstring)] = label
+}
+
+// RegisterEndpointEnv adds an env-var name whose value points at a model
+// service. Used by the env collector to label process-declared endpoints.
+func (c *EndpointClassifier) RegisterEndpointEnv(envName, label string) {
+	c.endpointEnvs[strings.ToUpper(envName)] = label
+}
+
+// LookupEnvVar returns the label registered for an env var name, if any. Match
+// is case-insensitive so callers don't need to normalise.
+func (c *EndpointClassifier) LookupEnvVar(envName string) (string, bool) {
+	l, ok := c.endpointEnvs[strings.ToUpper(envName)]
+	return l, ok
+}
+
+// ClassifyLocality returns the network locality of a host without DNS lookups.
+// IPs use CIDR membership; hostnames use suffix heuristics (.local / .internal
+// / .lan, plus "localhost"). Returns "loopback" | "private" | "public" | "unknown".
+func (c *EndpointClassifier) ClassifyLocality(host string) string {
+	if host == "" {
+		return "unknown"
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		switch {
+		case ip.IsLoopback():
+			return "loopback"
+		case c.isPrivate(ip):
+			return "private"
+		default:
+			return "public"
+		}
+	}
+	h := strings.ToLower(host)
+	switch {
+	case h == "localhost":
+		return "loopback"
+	case strings.HasSuffix(h, ".local"),
+		strings.HasSuffix(h, ".internal"),
+		strings.HasSuffix(h, ".lan"):
+		return "private"
+	default:
+		return "public"
+	}
+}
+
+// Classify returns (modelLabel, locality) for a remote IP. modelLabel is "" when
+// the endpoint is not a recognised model service.
+func (c *EndpointClassifier) Classify(ipStr string) (string, string) {
+	class := "unknown"
+	if ip := net.ParseIP(ipStr); ip != nil {
+		switch {
+		case ip.IsLoopback():
+			class = "loopback"
+		case c.isPrivate(ip):
+			class = "private"
+		default:
+			class = "public"
+		}
+	}
+	return c.lookupLabel(ipStr), class
+}
+
+func (c *EndpointClassifier) isPrivate(ip net.IP) bool {
+	for _, n := range c.privateNets {
+		if n.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *EndpointClassifier) lookupLabel(ipStr string) string {
+	c.mu.Lock()
+	if l, ok := c.cache[ipStr]; ok {
+		c.mu.Unlock()
+		return l
+	}
+	c.mu.Unlock()
+
+	label := ""
+	if names, err := net.LookupAddr(ipStr); err == nil {
+		for _, name := range names {
+			n := strings.ToLower(name)
+			for sub, l := range c.modelHosts {
+				if strings.Contains(n, sub) {
+					label = l
+					break
+				}
+			}
+			if label != "" {
+				break
+			}
+		}
+	}
+
+	c.mu.Lock()
+	c.cache[ipStr] = label
+	c.mu.Unlock()
+	return label
+}
