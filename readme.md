@@ -13,7 +13,7 @@ Find all agents which are running on your mashine and capture their details, inc
 
 ## Requirements
 
-- Go 1.22+ (built with 1.26)
+- Go 1.26+
 - SQLite driver - `modernc.org/sqlite`
 - Binary builds CGO-free and ships static. `CGO_ENABLED=0`
 
@@ -68,8 +68,21 @@ API endpoints:
 go test ./...                       # run all unit tests
 go test -v ./internal/correlate/... # one package, verbose
 go test -race ./...                 # with the race detector
+gofmt -l .                          # list unformatted files (empty = clean)
+gofmt -w .                          # format the tree
+go vet ./...                        # static checks
 ```
 
+Or via the Makefile (same commands CI runs):
+
+```bash
+make test       # go test ./...
+make race       # go test -race ./...
+make fmt-check  # fail if anything is unformatted
+make fmt        # gofmt -w .
+make vet        # go vet ./...
+make ci         # everything CI runs: fmt-check + vet + race + build
+```
 
 ## Backlog
 

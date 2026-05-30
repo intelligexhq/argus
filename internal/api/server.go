@@ -40,8 +40,8 @@ func NewServer(st *store.Store) *Server {
 	return s
 }
 
-func (s *Server) Serve(ln net.Listener) error            { return s.srv.Serve(ln) }
-func (s *Server) Shutdown(ctx context.Context) error     { return s.srv.Shutdown(ctx) }
+func (s *Server) Serve(ln net.Listener) error        { return s.srv.Serve(ln) }
+func (s *Server) Shutdown(ctx context.Context) error { return s.srv.Shutdown(ctx) }
 
 func (s *Server) writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")

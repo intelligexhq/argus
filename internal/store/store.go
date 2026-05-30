@@ -1,5 +1,4 @@
-// Package store persists scan results to a local SQLite database (pure-Go
-// modernc driver, no CGO — so the binary cross-compiles and ships static).
+// Package store persists scan results to a local SQLite database (modernc driver, no CGO, binary cross-compiles and ships static).
 //
 // Concurrency model: the engine is the single writer (one goroutine, one scan
 // at a time); the API only reads. WAL mode lets reads run concurrently with the
@@ -34,10 +33,9 @@ func Open(path string) (*Store, error) {
 func (s *Store) Close() error { return s.db.Close() }
 
 // migrate creates the schema on a fresh database. There is no in-place
-// migration path while the project is pre-users: schema changes during the
-// stabilisation phase are made by editing this CREATE block, and operators
-// (currently just the maintainer) delete ~/.argus/argus.db once. When v0.1 is
-// tagged and external users exist, this approach inverts and additive ALTERs
+// migration path while the project maturing: schema changes during this
+// phase are made by editing this CREATE block, and required removing old sqlite file.
+// next: when external users exist, this approach inverts and additive ALTERs
 // or a versioned migration runner go here.
 func (s *Store) migrate() error {
 	_, err := s.db.Exec(`
@@ -80,8 +78,8 @@ CREATE TABLE IF NOT EXISTS scan_runs (
 	return err
 }
 
-func ms(t time.Time) int64       { return t.UnixMilli() }
-func fromMS(v int64) time.Time   { return time.UnixMilli(v) }
+func ms(t time.Time) int64     { return t.UnixMilli() }
+func fromMS(v int64) time.Time { return time.UnixMilli(v) }
 
 // WriteSnapshot replaces the current process/connection snapshot and upserts the
 // agent inventory (preserving each agent's original first_seen).
