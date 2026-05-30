@@ -53,15 +53,6 @@ curl -v -XGET http://127.0.0.1:8765/v1/openapi.yaml
 curl --unix-socket ~/.argus/argus.sock http://localhost/v1/agents
 ```
 
-API endpoints:
-
-- `GET /healthz`
-- `GET /v1/agents`
-- `GET /v1/processes`
-- `GET /v1/connections`
-- `GET /v1/openapi` (Swagger UI, HTML)
-- `GET /v1/openapi.yaml` (raw spec)
-
 ## Testing
 
 ```bash

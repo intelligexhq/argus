@@ -102,7 +102,7 @@ func scan(ctx context.Context, collectors []collector.Collector, st *store.Store
 
 	now := time.Now()
 	agents := correlate.Correlate(now, &merged)
-	if err := st.WriteSnapshot(now, agents, merged.Processes, merged.Connections); err != nil {
+	if err := st.WriteSnapshot(cctx, now, agents, merged.Processes, merged.Connections); err != nil {
 		slog.Error("write snapshot", "err", err)
 		return
 	}

@@ -80,7 +80,8 @@ type expandedAgent struct {
 }
 
 func (s *Server) handleAgents(w http.ResponseWriter, r *http.Request) {
-	agents, err := s.st.ListAgents()
+	ctx := r.Context()
+	agents, err := s.st.ListAgents(ctx)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -94,7 +95,7 @@ func (s *Server) handleAgents(w http.ResponseWriter, r *http.Request) {
 
 	var procsByAgent map[string][]model.Process
 	if wantProcs {
-		procs, err := s.st.ListProcesses()
+		procs, err := s.st.ListProcesses(ctx)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -109,7 +110,7 @@ func (s *Server) handleAgents(w http.ResponseWriter, r *http.Request) {
 
 	var connsByAgent map[string][]model.Connection
 	if wantConns {
-		conns, err := s.st.ListConnections()
+		conns, err := s.st.ListConnections(ctx)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -149,8 +150,8 @@ func parseExpand(s string) (procs, conns bool) {
 	return
 }
 
-func (s *Server) handleProcesses(w http.ResponseWriter, _ *http.Request) {
-	procs, err := s.st.ListProcesses()
+func (s *Server) handleProcesses(w http.ResponseWriter, r *http.Request) {
+	procs, err := s.st.ListProcesses(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -158,8 +159,8 @@ func (s *Server) handleProcesses(w http.ResponseWriter, _ *http.Request) {
 	s.writeJSON(w, map[string]any{"processes": procs})
 }
 
-func (s *Server) handleConnections(w http.ResponseWriter, _ *http.Request) {
-	conns, err := s.st.ListConnections()
+func (s *Server) handleConnections(w http.ResponseWriter, r *http.Request) {
+	conns, err := s.st.ListConnections(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

@@ -47,11 +47,11 @@ func TestWriteSnapshot_AgentRollsUpPIDs(t *testing.T) {
 		{PID: 11, PPID: 10, Name: "rg", Exe: "/bin/rg", StartedAt: now, AgentID: "abc"},
 		{PID: 12, PPID: 1, Name: "unrelated", Exe: "/bin/unrelated", StartedAt: now}, // no AgentID
 	}
-	if err := st.WriteSnapshot(now, agents, procs, nil); err != nil {
+	if err := st.WriteSnapshot(t.Context(), now, agents, procs, nil); err != nil {
 		t.Fatalf("WriteSnapshot: %v", err)
 	}
 
-	got, err := st.ListAgents()
+	got, err := st.ListAgents(t.Context())
 	if err != nil {
 		t.Fatalf("ListAgents: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestWriteSnapshot_ReplacesProcsAndConns(t *testing.T) {
 	st := newTestStore(t)
 	t0 := time.Now().UTC().Truncate(time.Millisecond)
 
-	err := st.WriteSnapshot(t0, nil,
+	err := st.WriteSnapshot(t.Context(), t0, nil,
 		[]model.Process{{PID: 1, PPID: 0, Name: "a", StartedAt: t0}, {PID: 2, PPID: 1, Name: "b", StartedAt: t0}},
 		[]model.Connection{{PID: 1, RemoteIP: "1.2.3.4", RemotePort: 443, Classification: "public", ObservedAt: t0}},
 	)
@@ -81,7 +81,7 @@ func TestWriteSnapshot_ReplacesProcsAndConns(t *testing.T) {
 	}
 
 	t1 := t0.Add(time.Second)
-	err = st.WriteSnapshot(t1, nil,
+	err = st.WriteSnapshot(t.Context(), t1, nil,
 		[]model.Process{{PID: 3, PPID: 0, Name: "c", StartedAt: t1}},
 		nil,
 	)
@@ -89,7 +89,7 @@ func TestWriteSnapshot_ReplacesProcsAndConns(t *testing.T) {
 		t.Fatalf("WriteSnapshot 2: %v", err)
 	}
 
-	procs, err := st.ListProcesses()
+	procs, err := st.ListProcesses(t.Context())
 	if err != nil {
 		t.Fatalf("ListProcesses: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestWriteSnapshot_ReplacesProcsAndConns(t *testing.T) {
 		t.Errorf("snapshot did not replace processes; got %+v", procs)
 	}
 
-	conns, err := st.ListConnections()
+	conns, err := st.ListConnections(t.Context())
 	if err != nil {
 		t.Fatalf("ListConnections: %v", err)
 	}
@@ -113,21 +113,21 @@ func TestWriteSnapshot_AgentUpsertPreservesFirstSeen(t *testing.T) {
 	t0 := time.Now().UTC().Truncate(time.Millisecond)
 	t1 := t0.Add(5 * time.Minute)
 
-	err := st.WriteSnapshot(t0,
+	err := st.WriteSnapshot(t.Context(), t0,
 		[]model.Agent{{ID: "foo", Type: "ollama", Name: "ollama", Confidence: 0.6, FirstSeen: t0, LastSeen: t0}},
 		nil, nil)
 	if err != nil {
 		t.Fatalf("first write: %v", err)
 	}
 
-	err = st.WriteSnapshot(t1,
+	err = st.WriteSnapshot(t.Context(), t1,
 		[]model.Agent{{ID: "foo", Type: "ollama", Name: "ollama-renamed", Confidence: 0.9, FirstSeen: t1, LastSeen: t1}},
 		nil, nil)
 	if err != nil {
 		t.Fatalf("second write: %v", err)
 	}
 
-	got, err := st.ListAgents()
+	got, err := st.ListAgents(t.Context())
 	if err != nil {
 		t.Fatalf("ListAgents: %v", err)
 	}
@@ -154,14 +154,14 @@ func TestListAgents_NoProcessesReturnsEmptyPIDsSlice(t *testing.T) {
 	// as [] not null). Verify the empty case.
 	st := newTestStore(t)
 	now := time.Now().UTC().Truncate(time.Millisecond)
-	err := st.WriteSnapshot(now,
+	err := st.WriteSnapshot(t.Context(), now,
 		[]model.Agent{{ID: "x", Type: "t", Name: "n", FirstSeen: now, LastSeen: now}},
 		nil, nil)
 	if err != nil {
 		t.Fatalf("WriteSnapshot: %v", err)
 	}
 
-	got, err := st.ListAgents()
+	got, err := st.ListAgents(t.Context())
 	if err != nil {
 		t.Fatalf("ListAgents: %v", err)
 	}
@@ -178,11 +178,11 @@ func TestListConnections_Roundtrip(t *testing.T) {
 		Endpoint: "Anthropic API", Classification: "public",
 		ObservedAt: now, AgentID: "abc",
 	}
-	if err := st.WriteSnapshot(now, nil, nil, []model.Connection{c}); err != nil {
+	if err := st.WriteSnapshot(t.Context(), now, nil, nil, []model.Connection{c}); err != nil {
 		t.Fatalf("WriteSnapshot: %v", err)
 	}
 
-	got, err := st.ListConnections()
+	got, err := st.ListConnections(t.Context())
 	if err != nil {
 		t.Fatalf("ListConnections: %v", err)
 	}
@@ -212,10 +212,10 @@ func TestListConnections_EnvSourceRoundtrip(t *testing.T) {
 		ObservedAt: now, AgentID: "xyz",
 		Source: "env", SourceDetail: "OLLAMA_HOST",
 	}
-	if err := st.WriteSnapshot(now, nil, nil, []model.Connection{c}); err != nil {
+	if err := st.WriteSnapshot(t.Context(), now, nil, nil, []model.Connection{c}); err != nil {
 		t.Fatalf("WriteSnapshot: %v", err)
 	}
-	got, err := st.ListConnections()
+	got, err := st.ListConnections(t.Context())
 	if err != nil {
 		t.Fatalf("ListConnections: %v", err)
 	}

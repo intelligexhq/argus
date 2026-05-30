@@ -53,7 +53,7 @@ func TestHealthz(t *testing.T) {
 func TestAgentsHandlerWrapsStoreOutput(t *testing.T) {
 	st := newTestStore(t)
 	now := time.Now().UTC().Truncate(time.Millisecond)
-	err := st.WriteSnapshot(now,
+	err := st.WriteSnapshot(t.Context(), now,
 		[]model.Agent{{ID: "abc", Type: "claude-code", Name: "claude", Confidence: 0.85, FirstSeen: now, LastSeen: now}},
 		[]model.Process{{PID: 1, PPID: 0, Name: "claude", Exe: "/bin/claude", StartedAt: now, AgentID: "abc"}},
 		nil,
@@ -85,7 +85,7 @@ func TestAgentsHandlerWrapsStoreOutput(t *testing.T) {
 func TestAgentsHandler_ExpandProcessesAndConnections(t *testing.T) {
 	st := newTestStore(t)
 	now := time.Now().UTC().Truncate(time.Millisecond)
-	err := st.WriteSnapshot(now,
+	err := st.WriteSnapshot(t.Context(), now,
 		[]model.Agent{{ID: "abc", Type: "claude-code", Name: "claude", Confidence: 0.85, FirstSeen: now, LastSeen: now}},
 		[]model.Process{
 			{PID: 1, PPID: 0, Name: "claude", Exe: "/bin/claude", Cmdline: "claude --serve", StartedAt: now, AgentID: "abc"},

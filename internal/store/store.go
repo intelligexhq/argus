@@ -7,6 +7,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"time"
 
@@ -83,15 +84,15 @@ func fromMS(v int64) time.Time { return time.UnixMilli(v) }
 
 // WriteSnapshot replaces the current process/connection snapshot and upserts the
 // agent inventory (preserving each agent's original first_seen).
-func (s *Store) WriteSnapshot(now time.Time, agents []model.Agent, procs []model.Process, conns []model.Connection) error {
-	tx, err := s.db.Begin()
+func (s *Store) WriteSnapshot(ctx context.Context, now time.Time, agents []model.Agent, procs []model.Process, conns []model.Connection) error {
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
 
 	for _, a := range agents {
-		if _, err := tx.Exec(
+		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO agents(id,type,name,confidence,first_seen,last_seen)
 			 VALUES(?,?,?,?,?,?)
 			 ON CONFLICT(id) DO UPDATE SET
@@ -104,11 +105,11 @@ func (s *Store) WriteSnapshot(now time.Time, agents []model.Agent, procs []model
 		}
 	}
 
-	if _, err := tx.Exec(`DELETE FROM processes`); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM processes`); err != nil {
 		return err
 	}
 	for _, p := range procs {
-		if _, err := tx.Exec(
+		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO processes(pid,ppid,name,exe,cmdline,started_at,agent_id)
 			 VALUES(?,?,?,?,?,?,?)`,
 			p.PID, p.PPID, p.Name, p.Exe, p.Cmdline, ms(p.StartedAt), p.AgentID,
@@ -117,7 +118,7 @@ func (s *Store) WriteSnapshot(now time.Time, agents []model.Agent, procs []model
 		}
 	}
 
-	if _, err := tx.Exec(`DELETE FROM connections`); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM connections`); err != nil {
 		return err
 	}
 	for _, c := range conns {
@@ -125,7 +126,7 @@ func (s *Store) WriteSnapshot(now time.Time, agents []model.Agent, procs []model
 		if source == "" {
 			source = "socket"
 		}
-		if _, err := tx.Exec(
+		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO connections(pid,remote_ip,remote_host,remote_port,endpoint,classification,observed_at,agent_id,source,source_detail)
 			 VALUES(?,?,?,?,?,?,?,?,?,?)`,
 			c.PID, c.RemoteIP, c.RemoteHost, c.RemotePort, c.Endpoint, c.Classification, ms(c.ObservedAt), c.AgentID, source, c.SourceDetail,
@@ -134,7 +135,7 @@ func (s *Store) WriteSnapshot(now time.Time, agents []model.Agent, procs []model
 		}
 	}
 
-	if _, err := tx.Exec(
+	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO scan_runs(started_at,n_agents,n_processes,n_connections) VALUES(?,?,?,?)`,
 		ms(now), len(agents), len(procs), len(conns),
 	); err != nil {
@@ -144,8 +145,8 @@ func (s *Store) WriteSnapshot(now time.Time, agents []model.Agent, procs []model
 	return tx.Commit()
 }
 
-func (s *Store) ListAgents() ([]model.Agent, error) {
-	rows, err := s.db.Query(
+func (s *Store) ListAgents(ctx context.Context) ([]model.Agent, error) {
+	rows, err := s.db.QueryContext(ctx,
 		`SELECT id,type,name,confidence,first_seen,last_seen FROM agents ORDER BY last_seen DESC`)
 	if err != nil {
 		return nil, err
@@ -171,7 +172,7 @@ func (s *Store) ListAgents() ([]model.Agent, error) {
 		byID[agents[i].ID] = &agents[i]
 	}
 
-	pidRows, err := s.db.Query(`SELECT agent_id,pid FROM processes WHERE agent_id<>''`)
+	pidRows, err := s.db.QueryContext(ctx, `SELECT agent_id,pid FROM processes WHERE agent_id<>''`)
 	if err != nil {
 		return nil, err
 	}
@@ -189,8 +190,8 @@ func (s *Store) ListAgents() ([]model.Agent, error) {
 	return agents, pidRows.Err()
 }
 
-func (s *Store) ListProcesses() ([]model.Process, error) {
-	rows, err := s.db.Query(
+func (s *Store) ListProcesses(ctx context.Context) ([]model.Process, error) {
+	rows, err := s.db.QueryContext(ctx,
 		`SELECT pid,ppid,name,exe,cmdline,started_at,agent_id FROM processes ORDER BY pid`)
 	if err != nil {
 		return nil, err
@@ -209,8 +210,8 @@ func (s *Store) ListProcesses() ([]model.Process, error) {
 	return out, rows.Err()
 }
 
-func (s *Store) ListConnections() ([]model.Connection, error) {
-	rows, err := s.db.Query(
+func (s *Store) ListConnections(ctx context.Context) ([]model.Connection, error) {
+	rows, err := s.db.QueryContext(ctx,
 		`SELECT pid,remote_ip,remote_host,remote_port,endpoint,classification,observed_at,agent_id,source,source_detail
 		 FROM connections ORDER BY pid`)
 	if err != nil {
