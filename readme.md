@@ -1,10 +1,10 @@
 # Intelligex Argus
 
-Headless AI-agent discovery tool. 
+AI-agent discovery utility. 
 
-Simple Go binary that aims to find all agents running on a machine (Claude Code, Cursor, Copilot, Ollama, custom LLM clients, etc.). It identifies the agents, env variables they use, endpoints they talk to, and the child processes they spawn. presents all information over a local API endpoint.
+Find all agents which are running on your mashine and capture their details, including connections, processes and activity. 
 
-> Scope is **discovery & activity recording**, no EDR-grade syscall tracing yet. The collector is unprivileged / current user scope. tool is cross-platform.
+> Its a simple Go binary with the scope caped at **discovery & activity recording**, no EDR-grade syscall tracing yet. The collectors are unprivileged within current user scope. tool is cross-platform.
 
 ## How it works
 
@@ -13,8 +13,9 @@ Simple Go binary that aims to find all agents running on a machine (Claude Code,
 
 ## Requirements
 
-- Go 1.22+ (built with 1.26). The SQLite driver (`modernc.org/sqlite`) which is pure Go.
-the binary builds CGO-free and ships static. (we use `CGO_ENABLED=0` to drop it.)
+- Go 1.22+ (built with 1.26)
+- SQLite driver - `modernc.org/sqlite`
+- Binary builds CGO-free and ships static. `CGO_ENABLED=0`
 
 ## Build
 
@@ -70,21 +71,9 @@ go test -race ./...                 # with the race detector
 ```
 
 
-## Layout
-
-```
-cmd/argus           daemon entry point (flags, scan loop, signals)
-internal/model      canonical entities (Agent, Process, Connection)
-internal/collector  Collector interface + process, network, and env collectors
-internal/classify   endpoint classification (locality + model-service labels)
-internal/correlate  agent identification + child-process attachment
-internal/store      SQLite persistence (pure-Go modernc, WAL)
-internal/api        local HTTP/JSON read API + embedded OpenAPI spec
-```
-
 ## Backlog
 
-Items to address / explore. The scaffold is intentionally narrow — these expand its reach without compromising the unprivileged-by-default posture.
+Items we are planning to address & explore.
 
 **Lifecycle**
 - add linting & validation
@@ -93,8 +82,6 @@ Items to address / explore. The scaffold is intentionally narrow — these expan
 
 **Collection depth**
 
-- DNS/SNI capture collector to replace best-effort reverse-DNS labelling of remote IPs (current heuristic is brittle on shared CDNs and private model hosts). The unprivileged env-var collector closes the gap for agents that announce their endpoint via configuration (`OLLAMA_HOST`, `OPENAI_BASE_URL`, `AZURE_OPENAI_ENDPOINT`, …); DNS/SNI is still needed for the hardcoded-default case (Claude Code → `api.anthropic.com`, etc.).
-- Wire `classify.RegisterModelHost` to a config file so private/self-hosted model endpoints can be declared declaratively, not in code.
 - Event-collector (eBPF on Linux, EndpointSecurity on macOS, ETW on Windows) to capture short-lived subagents and the full process tree — currently child attachment is one level deep, on purpose.
 - Optional privileged mode for system-wide visibility into other users' processes/sockets (today: current-user scope only).
 
@@ -105,6 +92,5 @@ Items to address / explore. The scaffold is intentionally narrow — these expan
 
 **Quality**
 
-- Test coverage: `classify`, `correlate`, `api`, `collector`, and `store` have unit tests; `cmd/argus` (main wiring) and `internal/model` (pure types) are intentionally untested.
 - Cross-platform parity: behaviour of the process + network collectors needs verification on Linux, macOS, and Windows (gopsutil claims cross-platform, but we have not exercised the three).
 - Replace the readme TODOs (interactive gif demonstrating discovery; mermaid architecture diagram).
