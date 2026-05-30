@@ -118,7 +118,18 @@ func listenOn(addr string) (net.Listener, error) {
 	case strings.HasPrefix(addr, "unix:"):
 		path := strings.TrimPrefix(addr, "unix:")
 		_ = os.Remove(path) // clear a stale socket from a previous run
-		return net.Listen("unix", path)
+		ln, err := net.Listen("unix", path)
+		if err != nil {
+			return nil, err
+		}
+		// Restrict to the owning user. Without this the socket inherits the
+		// process umask (typically world-readable) and the API is unauthenticated,
+		// so any local user could read /v1/agents.
+		if err := os.Chmod(path, 0o600); err != nil {
+			_ = ln.Close()
+			return nil, fmt.Errorf("chmod socket: %w", err)
+		}
+		return ln, nil
 	case strings.HasPrefix(addr, "tcp:"):
 		return net.Listen("tcp", strings.TrimPrefix(addr, "tcp:"))
 	default:
