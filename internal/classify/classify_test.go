@@ -1,6 +1,7 @@
 package classify
 
 import (
+	"context"
 	"net"
 	"testing"
 )
@@ -23,7 +24,7 @@ func TestClassify_Locality(t *testing.T) {
 	}
 	for _, tc := range cases {
 		c.cache[tc.ip] = rdnsResult{} // prime to skip net.LookupAddr (offline tests)
-		_, _, got := c.Classify(tc.ip)
+		_, _, got := c.Classify(t.Context(), tc.ip)
 		if got != tc.want {
 			t.Errorf("Classify(%q) class = %q, want %q", tc.ip, got, tc.want)
 		}
@@ -36,7 +37,7 @@ func TestClassify_ReturnsRawPTRHost(t *testing.T) {
 	// the test offline.
 	c := NewDefault()
 	c.cache["104.16.0.1"] = rdnsResult{label: "", host: "1.0.16.104.cloudflareaccess.com"}
-	label, host, _ := c.Classify("104.16.0.1")
+	label, host, _ := c.Classify(t.Context(), "104.16.0.1")
 	if label != "" {
 		t.Errorf("label = %q, want empty (no allowlist match)", label)
 	}
@@ -87,6 +88,31 @@ func TestRegisterEndpointEnv(t *testing.T) {
 	c.RegisterEndpointEnv("my_proxy_url", "Internal Proxy")
 	if l, ok := c.LookupEnvVar("MY_PROXY_URL"); !ok || l != "Internal Proxy" {
 		t.Errorf("RegisterEndpointEnv round-trip failed: got (%q, %v)", l, ok)
+	}
+}
+
+func TestLookupRDNS_CancelledContextSkipsCache(t *testing.T) {
+	// A cancelled ctx must return empty results AND leave the cache untouched,
+	// so the next scan retries instead of perpetually treating the IP as
+	// "looked up, nothing useful".
+	c := NewDefault()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	const ip = "8.8.8.8"
+	label, host, locality := c.Classify(ctx, ip)
+	if label != "" || host != "" {
+		t.Errorf("cancelled ctx should return empty label/host, got label=%q host=%q", label, host)
+	}
+	if locality != "public" {
+		t.Errorf("locality is offline (no DNS), should still be %q, got %q", "public", locality)
+	}
+
+	c.mu.Lock()
+	_, cached := c.cache[ip]
+	c.mu.Unlock()
+	if cached {
+		t.Error("cache was populated despite ctx cancellation; future scans will not retry")
 	}
 }
 

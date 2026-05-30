@@ -2,7 +2,7 @@
 
 AI-agent discovery utility. 
 
-Find all agents which are running on your mashine and capture their details, including connections, processes and activity. 
+Finds AI agents which are running on your mashine and capture their details, including connections, processes and activity. Provides this information through HTTP API 
 
 > Its a simple Go binary with the scope caped at **discovery & activity recording**, no EDR-grade syscall tracing yet. The collectors are unprivileged within current user scope. tool is cross-platform.
 
@@ -56,17 +56,15 @@ curl --unix-socket ~/.argus/argus.sock http://localhost/v1/agents
 ## Testing
 
 ```bash
+## setup go testing standards
 go test ./...                       # run all unit tests
 go test -v ./internal/correlate/... # one package, verbose
 go test -race ./...                 # with the race detector
 gofmt -l .                          # list unformatted files (empty = clean)
 gofmt -w .                          # format the tree
 go vet ./...                        # static checks
-```
 
-Or via the Makefile (same commands CI runs):
-
-```bash
+## or makefile which supports local and ci
 make test       # go test ./...
 make race       # go test -race ./...
 make fmt-check  # fail if anything is unformatted
@@ -79,20 +77,11 @@ make ci         # everything CI runs: fmt-check + vet + race + build
 
 Items we are planning to address & explore.
 
-**Lifecycle**
-- add linting & validation
-- add github actions for testig and building
-- how do we distribute? best practices?
 
 **Collection depth**
 
 - Event-collector (eBPF on Linux, EndpointSecurity on macOS, ETW on Windows) to capture short-lived subagents and the full process tree — currently child attachment is one level deep, on purpose.
 - Optional privileged mode for system-wide visibility into other users' processes/sockets (today: current-user scope only).
-
-**API & ops**
-
-- Optional token auth on the HTTP API for deployments that bind beyond loopback (default loopback/unix-socket posture stays auth-free).
-- Embed Swagger UI assets in the binary instead of loading from CDN, so `/v1/openapi` works fully offline.
 
 **Quality**
 

@@ -6,10 +6,23 @@
 package classify
 
 import (
+	"context"
+	"errors"
 	"net"
 	"strings"
 	"sync"
+	"time"
 )
+
+// rdnsResolver is forced to the pure-Go path: the cgo getaddrinfo resolver
+// ignores context cancellation, so a stalled DNS server can leak goroutines
+// even after the per-lookup deadline fires. CGO is off in our build today, but
+// this is cheap insurance.
+var rdnsResolver = &net.Resolver{PreferGo: true}
+
+// rdnsLookupTimeout caps each individual reverse-DNS call. Results are cached
+// for the process lifetime so this only affects cold lookups.
+const rdnsLookupTimeout = 2 * time.Second
 
 // EndpointClassifier resolves remote IPs to (label, classification).
 type EndpointClassifier struct {
@@ -123,8 +136,9 @@ func (c *EndpointClassifier) ClassifyLocality(host string) string {
 // modelLabel is "" when the endpoint is not a recognised model service. host is
 // the raw PTR result (possibly generic, e.g. "*.cloudfront.net") — preserved so
 // callers can record provenance even when no curated label matched. host is ""
-// if rDNS lookup failed or returned nothing.
-func (c *EndpointClassifier) Classify(ipStr string) (label, host, locality string) {
+// if rDNS lookup failed or returned nothing. The ctx caps the reverse-DNS
+// lookup; a cancelled ctx returns ("", "", locality) without poisoning the cache.
+func (c *EndpointClassifier) Classify(ctx context.Context, ipStr string) (label, host, locality string) {
 	locality = "unknown"
 	if ip := net.ParseIP(ipStr); ip != nil {
 		switch {
@@ -136,7 +150,7 @@ func (c *EndpointClassifier) Classify(ipStr string) (label, host, locality strin
 			locality = "public"
 		}
 	}
-	label, host = c.lookupRDNS(ipStr)
+	label, host = c.lookupRDNS(ctx, ipStr)
 	return
 }
 
@@ -150,9 +164,11 @@ func (c *EndpointClassifier) isPrivate(ip net.IP) bool {
 }
 
 // lookupRDNS performs a reverse-DNS lookup and returns (curated label, raw host).
-// Both halves are cached; an entry with empty fields means "looked up, nothing
-// useful". The first PTR result (trailing dot trimmed) becomes the host.
-func (c *EndpointClassifier) lookupRDNS(ipStr string) (label, host string) {
+// The result is cached; an entry with empty fields means "looked up, nothing
+// useful" — definitive DNS failures (NXDOMAIN etc.) cache an empty entry so we
+// don't retry. Context cancellation/timeout does NOT cache, so a slow DNS path
+// gets another chance on the next scan.
+func (c *EndpointClassifier) lookupRDNS(ctx context.Context, ipStr string) (label, host string) {
 	c.mu.Lock()
 	if entry, ok := c.cache[ipStr]; ok {
 		c.mu.Unlock()
@@ -160,7 +176,13 @@ func (c *EndpointClassifier) lookupRDNS(ipStr string) (label, host string) {
 	}
 	c.mu.Unlock()
 
-	if names, err := net.LookupAddr(ipStr); err == nil && len(names) > 0 {
+	lctx, cancel := context.WithTimeout(ctx, rdnsLookupTimeout)
+	defer cancel()
+	names, err := rdnsResolver.LookupAddr(lctx, ipStr)
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return "", ""
+	}
+	if err == nil && len(names) > 0 {
 		host = strings.TrimSuffix(strings.ToLower(names[0]), ".")
 		for _, name := range names {
 			n := strings.ToLower(name)

@@ -37,7 +37,7 @@ func (c *NetworkCollector) Collect(ctx context.Context) (Result, error) {
 		if cn.Pid == 0 || cn.Raddr.IP == "" || cn.Raddr.Port == 0 {
 			continue // listening / local / unattributed socket
 		}
-		label, host, class := c.classifier.Classify(cn.Raddr.IP)
+		label, host, class := c.classifier.Classify(ctx, cn.Raddr.IP)
 		out = append(out, model.Connection{
 			PID:            cn.Pid,
 			RemoteIP:       cn.Raddr.IP,
