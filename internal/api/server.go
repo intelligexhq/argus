@@ -36,10 +36,28 @@ func NewServer(st *store.Store) *Server {
 	mux.HandleFunc("GET /v1/connections", s.handleConnections)
 	mux.HandleFunc("GET /v1/openapi", s.handleOpenAPIUI)
 	mux.HandleFunc("GET /v1/openapi.yaml", s.handleOpenAPI)
-	s.srv = &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+
+	// Order matters: requestID is outermost so access-log and recover both see
+	// the ID; recover sits inside access-log so a panic-turned-500 is reflected
+	// in the logged status.
+	handler := chain(mux,
+		requestIDMiddleware,
+		accessLogMiddleware,
+		recoverMiddleware,
+	)
+
+	s.srv = &http.Server{
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    1 << 16,
+	}
 	return s
 }
 
+func (s *Server) Handler() http.Handler              { return s.srv.Handler }
 func (s *Server) Serve(ln net.Listener) error        { return s.srv.Serve(ln) }
 func (s *Server) Shutdown(ctx context.Context) error { return s.srv.Shutdown(ctx) }
 

@@ -26,7 +26,7 @@ func newTestStore(t *testing.T) *store.Store {
 
 func newTestHTTP(t *testing.T, st *store.Store) *httptest.Server {
 	t.Helper()
-	srv := httptest.NewServer(NewServer(st).srv.Handler)
+	srv := httptest.NewServer(NewServer(st).Handler())
 	t.Cleanup(srv.Close)
 	return srv
 }
