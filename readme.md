@@ -22,6 +22,7 @@ Finds AI agents which are running on your mashine and capture their details, inc
 ```bash
 # general
 go build -o bin/argus ./cmd/argus
+make
 # platform specific
 CGO_ENABLED=0 GOOS=linux  GOARCH=amd64 go build -o bin/argus-linux-amd64  ./cmd/argus
 CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o bin/argus-darwin-arm64 ./cmd/argus
@@ -30,9 +31,11 @@ CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o bin/argus-darwin-arm64 ./cmd/
 ## Run
 
 ```bash
-./bin/argus
-# default: TCP listener at 127.0.0.1:8765
-./bin/argus --listen tcp:127.0.0.1:4000
+# http API
+make run # runs on custom port 4008
+./bin/argus --listen tcp:127.0.0.1:4008
+
+# unix socket
 ./bin/argus --listen unix:$HOME/.argus/argus.sock --interval 5s
 ```
 
@@ -43,11 +46,11 @@ Flags: `--db <path>` · `--listen tcp:host:port | unix:/path` · `--interval <du
 Over the default TCP listener:
 
 ```bash
-curl -v -XGET http://127.0.0.1:8765/v1/agents
-curl -v -XGET http://127.0.0.1:8765/v1/agents?expand=processes,connections
-curl -v -XGET http://127.0.0.1:8765/v1/connections
-curl -v -XGET http://127.0.0.1:8765/v1/openapi.yaml
-# browse rendered docs at http://127.0.0.1:8765/v1/openapi
+# browse rendered docs at http://127.0.0.1:4008/v1/openapi
+curl -v -XGET http://127.0.0.1:4008/v1/agents
+curl -v -XGET http://127.0.0.1:4008/v1/agents?expand=processes,connections
+curl -v -XGET http://127.0.0.1:4008/v1/connections
+curl -v -XGET http://127.0.0.1:4008/v1/openapi.yaml
 
 # if started with --listen unix:...
 curl --unix-socket ~/.argus/argus.sock http://localhost/v1/agents

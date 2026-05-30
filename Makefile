@@ -1,7 +1,10 @@
-.PHONY: build fmt fmt-check vet test race ci clean
+.PHONY: build run fmt fmt-check vet test race ci clean
 
 build:
 	go build -o bin/argus ./cmd/argus
+
+run: build
+	./bin/argus -listen tcp:127.0.0.1:4008
 
 fmt:
 	gofmt -w .
