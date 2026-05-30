@@ -1,0 +1,169 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  guard:
+    name: guard tag is on main
+    runs-on: ubuntu-latest
+    outputs:
+      on_main: ${{ steps.check.outputs.on_main }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: check
+        name: check tag commit is reachable from main
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          TAG_SHA=$(git rev-list -n 1 "${GITHUB_REF}")
+          if git merge-base --is-ancestor "${TAG_SHA}" origin/main; then
+            echo "on_main=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Tag ${GITHUB_REF_NAME} (${TAG_SHA}) is on main — release will proceed."
+          else
+            echo "on_main=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Tag ${GITHUB_REF_NAME} (${TAG_SHA}) is not on main — release skipped (not an error)."
+          fi
+
+  validate:
+    name: validate
+    needs: guard
+    if: needs.guard.outputs.on_main == 'true'
+    uses: ./.github/workflows/validate.yml
+
+  build:
+    name: build ${{ matrix.goos }}/${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    needs: validate
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: build
+        env:
+          CGO_ENABLED: '0'
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          VERSION: ${{ github.ref_name }}
+        run: |
+          mkdir -p dist
+          out="dist/argus-${GOOS}-${GOARCH}"
+          go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o "${out}" ./cmd/argus
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: argus-${{ matrix.goos }}-${{ matrix.goarch }}-raw
+          path: dist/argus-${{ matrix.goos }}-${{ matrix.goarch }}
+          if-no-files-found: error
+          retention-days: 1
+
+  universal-darwin:
+    name: lipo darwin universal
+    runs-on: macos-15
+    needs: build
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: argus-darwin-amd64-raw
+          path: dist-amd64
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: argus-darwin-arm64-raw
+          path: dist-arm64
+
+      - name: lipo
+        run: |
+          mkdir -p dist
+          chmod +x dist-amd64/argus-darwin-amd64 dist-arm64/argus-darwin-arm64
+          lipo -create -output dist/argus-darwin-universal \
+            dist-amd64/argus-darwin-amd64 \
+            dist-arm64/argus-darwin-arm64
+          lipo -info dist/argus-darwin-universal
+          file dist/argus-darwin-universal
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: argus-darwin-universal-raw
+          path: dist/argus-darwin-universal
+          if-no-files-found: error
+          retention-days: 1
+
+  package:
+    name: package + release
+    runs-on: ubuntu-latest
+    needs: [build, universal-darwin]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: argus-*-raw
+          path: raw
+
+      - name: package archives + sha256
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p out
+
+          package() {
+            local target="$1"
+            local src="raw/argus-${target}-raw/argus-${target}"
+            local stage="stage-${target}"
+            local archive="out/argus-${target}-${VERSION}.tar.gz"
+
+            test -f "${src}" || { echo "missing: ${src}"; exit 1; }
+
+            mkdir -p "${stage}"
+            cp "${src}" "${stage}/argus"
+            chmod +x "${stage}/argus"
+            cp LICENSE "${stage}/" 2>/dev/null || true
+            cp readme.md "${stage}/" 2>/dev/null || true
+
+            tar -czf "${archive}" -C "${stage}" .
+            (cd out && sha256sum "$(basename "${archive}")" > "$(basename "${archive}").sha256")
+          }
+
+          package linux-amd64
+          package linux-arm64
+          package darwin-amd64
+          package darwin-arm64
+          package darwin-universal
+
+          ls -la out/
+          cat out/*.sha256
+
+      - name: github release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            out/*.tar.gz
+            out/*.sha256
+          generate_release_notes: true
+          fail_on_unmatched_files: true
