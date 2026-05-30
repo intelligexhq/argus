@@ -56,15 +56,8 @@ curl --unix-socket ~/.argus/argus.sock http://localhost/v1/agents
 ## Testing
 
 ```bash
-## setup go testing standards
-go test ./...                       # run all unit tests
-go test -v ./internal/correlate/... # one package, verbose
-go test -race ./...                 # with the race detector
-gofmt -l .                          # list unformatted files (empty = clean)
-gofmt -w .                          # format the tree
-go vet ./...                        # static checks
+## we use makefile for local and ci runs
 
-## or makefile which supports local and ci
 make test       # go test ./...
 make race       # go test -race ./...
 make fmt-check  # fail if anything is unformatted
@@ -75,15 +68,4 @@ make ci         # everything CI runs: fmt-check + vet + race + build
 
 ## Backlog
 
-Items we are planning to address & explore.
-
-
-**Collection depth**
-
-- Event-collector (eBPF on Linux, EndpointSecurity on macOS, ETW on Windows) to capture short-lived subagents and the full process tree — currently child attachment is one level deep, on purpose.
-- Optional privileged mode for system-wide visibility into other users' processes/sockets (today: current-user scope only).
-
-**Quality**
-
-- Cross-platform parity: behaviour of the process + network collectors needs verification on Linux, macOS, and Windows (gopsutil claims cross-platform, but we have not exercised the three).
-- Replace the readme TODOs (interactive gif demonstrating discovery; mermaid architecture diagram).
+See [backlog.md](backlog.md) for the roadmap.
