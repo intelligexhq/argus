@@ -181,6 +181,26 @@ These items appeared in earlier roadmap drafts and are now explicitly **deferred
 - ~~Event collector (eBPF / EndpointSecurity / ETW) for short-lived subagents~~ — requires kernel-level integration; out of scope.
 - ~~Optional privileged mode for system-wide visibility~~ — argus runs as the invoking user; out of scope.
 
+## Feature: web UI (deferred until after Phase 1)
+
+A local web UI that renders the API data as pages. Deferred deliberately — not a non-goal, but not a now-goal either.
+
+**Why deferred**: a separate macOS menu bar utility is planned and is the more differentiated consumer surface; the API + Swagger UI already cover the discovery use case today. Building a web UI now risks competing with the menu bar utility, growing argus's maintenance footprint, and committing to ongoing UX work before there's a clear hole to fill.
+
+**Reassess after**:
+1. Phase 1 (activity capture) has shipped and been used for a few weeks. Real curl + jq usage tells us what a UI would unlock.
+2. The macOS menu bar utility has taken shape. Its scope determines whether a cross-platform web UI is still needed.
+3. There's a non-macOS audience asking for a viewing surface.
+
+**If built — hard scope cap** (lock these decisions now so the future "let's just add one more page" instinct has to fight for it):
+
+- **Three pages, server-rendered, no JS framework.** Agents list → agent detail → timeline. `html/template` + a hand-written CSS file + optional HTMX include. No SPA, no React/Vue/Svelte, no npm, no build step.
+- **In the argus binary.** Same daemon serves HTML routes alongside JSON. `//go:embed` for templates/CSS/HTMX, matching the existing Swagger pattern.
+- **No charts beyond server-rendered SVG sparklines**, no WebSockets/SSE (page refresh or HTMX poll), no user accounts, no themes, no settings.
+- Estimated cost when built: ~700 lines of Go + template + CSS, ~2-3 days, ~50-100 KB binary growth.
+
+**Out of scope for any version of this UI**: remote-host aggregation, multi-tenancy, write actions (the API is read-only). The web UI mirrors the API; it doesn't extend it.
+
 ## API & ops
 
 - **Token auth** for deployments that bind beyond loopback. Default loopback / unix-socket posture stays auth-free.
