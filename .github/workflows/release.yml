@@ -15,7 +15,7 @@ jobs:
     outputs:
       on_main: ${{ steps.check.outputs.on_main }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -56,9 +56,9 @@ jobs:
           - goos: darwin
             goarch: arm64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
@@ -74,7 +74,7 @@ jobs:
           out="dist/argus-${GOOS}-${GOARCH}"
           go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o "${out}" ./cmd/argus
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: argus-${{ matrix.goos }}-${{ matrix.goarch }}-raw
           path: dist/argus-${{ matrix.goos }}-${{ matrix.goarch }}
@@ -86,12 +86,12 @@ jobs:
     runs-on: macos-15
     needs: build
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: argus-darwin-amd64-raw
           path: dist-amd64
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: argus-darwin-arm64-raw
           path: dist-arm64
@@ -106,7 +106,7 @@ jobs:
           lipo -info dist/argus-darwin-universal
           file dist/argus-darwin-universal
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: argus-darwin-universal-raw
           path: dist/argus-darwin-universal
@@ -118,9 +118,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build, universal-darwin]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           pattern: argus-*-raw
           path: raw
@@ -160,7 +160,7 @@ jobs:
           cat out/*.sha256
 
       - name: github release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             out/*.tar.gz
