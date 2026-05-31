@@ -25,7 +25,9 @@ import (
 )
 
 // Build identity. Overridden at link time via
-//   -ldflags "-X main.version=vX.Y.Z -X main.commit=<sha> -X main.buildTime=<rfc3339>"
+//
+//	-ldflags "-X main.version=vX.Y.Z -X main.commit=<sha> -X main.buildTime=<rfc3339>"
+//
 // by the release workflow. Local `go build` leaves these at their defaults,
 // so dev binaries identify themselves as "dev".
 var (
