@@ -26,7 +26,14 @@ func newTestStore(t *testing.T) *store.Store {
 
 func newTestHTTP(t *testing.T, st *store.Store) *httptest.Server {
 	t.Helper()
-	srv := httptest.NewServer(NewServer(st).Handler())
+	srv := httptest.NewServer(NewServer(st, BuildInfo{}).Handler())
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func newTestHTTPWithBuild(t *testing.T, st *store.Store, build BuildInfo) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(NewServer(st, build).Handler())
 	t.Cleanup(srv.Close)
 	return srv
 }
@@ -180,6 +187,53 @@ func TestAgentsHandler_ExpandProcessesAndConnections(t *testing.T) {
 		}
 		if len(got.Agents[0].Processes) != 2 {
 			t.Errorf("processes should still expand: %+v", got.Agents[0])
+		}
+	})
+}
+
+func TestVersion(t *testing.T) {
+	t.Run("populated build info round-trips", func(t *testing.T) {
+		want := BuildInfo{Version: "v0.1.1", Commit: "abc1234", BuildTime: "2026-05-30T12:00:00Z"}
+		srv := newTestHTTPWithBuild(t, newTestStore(t), want)
+
+		resp, err := http.Get(srv.URL + "/v1/version")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status %d, want 200", resp.StatusCode)
+		}
+		if ct := resp.Header.Get("Content-Type"); ct != "application/json" {
+			t.Errorf("content-type = %q, want application/json", ct)
+		}
+		var got BuildInfo
+		if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+			t.Fatal(err)
+		}
+		if got != want {
+			t.Errorf("BuildInfo = %+v, want %+v", got, want)
+		}
+	})
+
+	t.Run("dev defaults render as empty strings", func(t *testing.T) {
+		// Mirrors a local `go build` with no ldflags: version is "dev",
+		// commit and build_time are empty. The contract is that empty
+		// strings are acceptable, not that the fields are absent.
+		srv := newTestHTTPWithBuild(t, newTestStore(t), BuildInfo{Version: "dev"})
+
+		resp, err := http.Get(srv.URL + "/v1/version")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+
+		var got BuildInfo
+		if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+			t.Fatal(err)
+		}
+		if got.Version != "dev" || got.Commit != "" || got.BuildTime != "" {
+			t.Errorf("dev BuildInfo = %+v, want {Version:dev}", got)
 		}
 	})
 }

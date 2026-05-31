@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Argus collector API
-  version: 0.1.0
+  version: 0.1.1
   description: >
     Local read API for the Argus headless agent-discovery collector. Served
     over a unix domain socket (default) or loopback TCP. This document is the
@@ -23,6 +23,22 @@ paths:
                 type: object
                 properties:
                   status: { type: string }
+  /v1/version:
+    get:
+      summary: Binary build identity
+      description: >
+        Returns the version, commit, and build timestamp baked into the
+        running binary at link time. Used by clients (e.g. Talos) to detect
+        drift between the bundled argus binary and the daemon currently
+        serving requests. Fields are populated via `-ldflags` in the release
+        pipeline; local dev builds report `{"version":"dev","commit":"","build_time":""}`.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BuildInfo"
   /v1/agents:
     get:
       summary: Discovered agents (current inventory)
@@ -106,6 +122,22 @@ paths:
             text/html: {}
 components:
   schemas:
+    BuildInfo:
+      type: object
+      required: [version, commit, build_time]
+      properties:
+        version:
+          type: string
+          description: "Semver tag the binary was built from (e.g. `v0.1.1`). `dev` for local builds with no ldflags injection."
+          example: v0.1.1
+        commit:
+          type: string
+          description: "Short git SHA the binary was built from. Empty for local dev builds."
+          example: abc1234
+        build_time:
+          type: string
+          description: "Build timestamp in RFC 3339 UTC. Empty for local dev builds."
+          example: "2026-05-30T12:00:00Z"
     Agent:
       type: object
       properties:

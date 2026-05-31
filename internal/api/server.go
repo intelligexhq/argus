@@ -22,15 +22,26 @@ var openapiSpec []byte
 //go:embed openapi.html
 var openapiHTML []byte
 
-type Server struct {
-	st  *store.Store
-	srv *http.Server
+// BuildInfo describes the binary's identity. Populated by main from -ldflags
+// at link time; threaded through NewServer so internal/api stays decoupled
+// from the main package's build variables.
+type BuildInfo struct {
+	Version   string `json:"version"`
+	Commit    string `json:"commit"`
+	BuildTime string `json:"build_time"`
 }
 
-func NewServer(st *store.Store) *Server {
-	s := &Server{st: st}
+type Server struct {
+	st    *store.Store
+	srv   *http.Server
+	build BuildInfo
+}
+
+func NewServer(st *store.Store, build BuildInfo) *Server {
+	s := &Server{st: st, build: build}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.handleHealth)
+	mux.HandleFunc("GET /v1/version", s.handleVersion)
 	mux.HandleFunc("GET /v1/agents", s.handleAgents)
 	mux.HandleFunc("GET /v1/processes", s.handleProcesses)
 	mux.HandleFunc("GET /v1/connections", s.handleConnections)
@@ -68,6 +79,10 @@ func (s *Server) writeJSON(w http.ResponseWriter, v any) {
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	s.writeJSON(w, map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleVersion(w http.ResponseWriter, _ *http.Request) {
+	s.writeJSON(w, s.build)
 }
 
 // expandedAgent extends model.Agent with optional joined detail for the

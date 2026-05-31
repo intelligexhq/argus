@@ -24,13 +24,29 @@ import (
 	"github.com/intelligexhq/argus/internal/store"
 )
 
-func main() {
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, nil)))
+// Build identity. Overridden at link time via
+//   -ldflags "-X main.version=vX.Y.Z -X main.commit=<sha> -X main.buildTime=<rfc3339>"
+// by the release workflow. Local `go build` leaves these at their defaults,
+// so dev binaries identify themselves as "dev".
+var (
+	version   = "dev"
+	commit    = ""
+	buildTime = ""
+)
 
+func main() {
 	dbPath := flag.String("db", defaultDBPath(), "path to the SQLite database file")
 	listen := flag.String("listen", "tcp:127.0.0.1:8765", "listen address: tcp:host:port or unix:/path")
 	interval := flag.Duration("interval", 15*time.Second, "collection interval")
+	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(version)
+		return
+	}
+
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, nil)))
 
 	st, err := store.Open(*dbPath)
 	if err != nil {
@@ -52,7 +68,11 @@ func main() {
 	if err != nil {
 		die("listen", "addr", *listen, "err", err)
 	}
-	srv := api.NewServer(st)
+	srv := api.NewServer(st, api.BuildInfo{
+		Version:   version,
+		Commit:    commit,
+		BuildTime: buildTime,
+	})
 	go func() {
 		slog.Info("api listening", "addr", *listen)
 		if err := srv.Serve(ln); err != nil && ctx.Err() == nil {
