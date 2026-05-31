@@ -69,10 +69,18 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           VERSION: ${{ github.ref_name }}
+          COMMIT: ${{ github.sha }}
         run: |
           mkdir -p dist
           out="dist/argus-${GOOS}-${GOARCH}"
-          go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o "${out}" ./cmd/argus
+          # Short SHA for the binary surface; build_time is generated at this
+          # step so it matches the actual link time, not the workflow start.
+          SHORT_SHA="${COMMIT:0:7}"
+          BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          go build -trimpath -ldflags "-s -w \
+            -X main.version=${VERSION} \
+            -X main.commit=${SHORT_SHA} \
+            -X main.buildTime=${BUILD_TIME}" -o "${out}" ./cmd/argus
 
       - uses: actions/upload-artifact@v6
         with:
